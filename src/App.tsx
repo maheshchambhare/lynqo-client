@@ -45,6 +45,7 @@ export default function App() {
   const [removeWatermark, setRemoveWatermark] = useState(false);
   const [customBrandTitle, setCustomBrandTitle] = useState<string | null>(null);
   const [customFaviconUrl, setCustomFaviconUrl] = useState<string | null>(null);
+  const [logoError, setLogoError] = useState(false);
   
   // Tabs & Responsiveness
   const [activeTab, setActiveTab] = useState<'messages' | 'participants'>('messages');
@@ -57,13 +58,28 @@ export default function App() {
     }
     const params = new URLSearchParams(window.location.search);
     if (params.get('server')) {
-      return params.get('server')!.replace(/\/+$/, '');
+      const s = params.get('server')!.replace(/\/+$/, '');
+      try { localStorage.setItem('lynqo_server_url', s); } catch (_) {}
+      return s;
+    }
+    const hash = window.location.hash;
+    if (hash.includes('server=')) {
+      const match = hash.match(/server=([^&]+)/);
+      if (match) {
+        const s = decodeURIComponent(match[1]).replace(/\/+$/, '');
+        try { localStorage.setItem('lynqo_server_url', s); } catch (_) {}
+        return s;
+      }
     }
     if (import.meta.env.DEV) {
       return 'http://127.0.0.1:7432';
     }
-    if (window.location.origin.includes('pages.dev') || window.location.origin.includes('github.io')) {
-      return 'https://lynqo.mcrudra.com';
+    try {
+      const saved = localStorage.getItem('lynqo_server_url');
+      if (saved && saved.trim()) return saved.trim().replace(/\/+$/, '');
+    } catch (_) {}
+    if (window.location.origin.includes('pages.dev') || window.location.origin.includes('github.io') || window.location.origin.includes('lynqo.mcrudra.com')) {
+      return 'http://127.0.0.1:7432';
     }
     return window.location.origin;
   };
@@ -131,9 +147,12 @@ export default function App() {
           } else {
             setIsAuthenticated(false);
           }
+        } else {
+          setAuthError(`Unable to connect to Lynqo server at ${serverBaseUrl}. Please ensure your Lynqo Desktop app is running and your share link includes ?server= parameter.`);
         }
       } catch (e) {
         console.error('Failed to check auth status:', e);
+        setAuthError(`Unable to connect to Lynqo Desktop server (${serverBaseUrl}). Make sure Lynqo Desktop app is active.`);
       } finally {
         setIsCheckingAuthStatus(false);
       }
@@ -210,7 +229,7 @@ export default function App() {
         setAuthError(data.error || 'Invalid credentials. Please check password.');
       }
     } catch (e) {
-      setAuthError('Authentication request failed. Check server connection.');
+      setAuthError(`Authentication failed. Could not reach Lynqo server at ${serverBaseUrl}.`);
     } finally {
       setIsSubmittingAuth(false);
     }
@@ -477,10 +496,24 @@ export default function App() {
       <div className="login-gateway-container">
         <form onSubmit={handleAuthenticate} className="card">
           <div className="brand-logo-container" style={{ height: 60, margin: '0 auto 1.25rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            {isPro && customLogo ? (
-              <img src={customLogo.startsWith('/') ? `${serverBaseUrl}${customLogo}` : customLogo} alt="Logo" style={{ maxHeight: 44, maxWidth: 220, objectFit: 'contain' }} />
+            {isPro && customLogo && !logoError ? (
+              <img
+                src={customLogo.startsWith('/') ? `${serverBaseUrl}${customLogo}` : customLogo}
+                alt="Logo"
+                onError={() => setLogoError(true)}
+                style={{ maxHeight: 44, maxWidth: 220, objectFit: 'contain' }}
+              />
+            ) : !logoError ? (
+              <img
+                src={`${serverBaseUrl}/public/horizontal-logo.png`}
+                alt="Lynqo Studio"
+                onError={() => setLogoError(true)}
+                style={{ maxHeight: 44, maxWidth: 220, objectFit: 'contain' }}
+              />
             ) : (
-              <img src={`${serverBaseUrl}/public/horizontal-logo.png`} alt="Logo" style={{ maxHeight: 44, maxWidth: 220, objectFit: 'contain' }} />
+              <div style={{ fontSize: '1.4rem', fontWeight: 800, color: '#fff', letterSpacing: '-0.5px' }}>
+                🎬 {customBrandTitle || "Lynqo Review Studio"}
+              </div>
             )}
           </div>
           <h2>{customBrandTitle || "Lynqo Review Studio"}</h2>
@@ -496,10 +529,10 @@ export default function App() {
           )}
 
           <div style={{ textAlign: 'left', marginBottom: '1.25rem' }}>
-            <label style={{ fontSize: '0.78rem', color: '#a0aec0', fontWeight: 700, marginBottom: 6, display: 'block' }}>Your Client Name</label>
+            <label style={{ fontSize: '0.78rem', color: '#a0aec0', fontWeight: 700, marginBottom: 6, display: 'block' }}>Your Client Name <span style={{ opacity: 0.6, fontWeight: 500 }}>(Optional)</span></label>
             <input
               type="text"
-              placeholder="e.g. John Doe"
+              placeholder="e.g. John Doe (leave empty for Client)"
               value={loginNameInput}
               onChange={(e) => setLoginNameInput(e.target.value)}
               style={{ width: '100%', padding: '0.95rem 1.25rem', background: 'rgba(0,0,0,0.35)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 16, color: '#fff', outline: 'none', fontSize: '0.95rem' }}
